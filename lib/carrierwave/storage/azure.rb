@@ -32,9 +32,22 @@ module CarrierWave
         end
 
         def store!(file)
-          @content = file.read
           @content_type = file.content_type
-          @connection.create_block_blob @uploader.azure_container, @path, @content, content_type: @content_type
+          file_to_send = ::File.open(file.file, 'rb')
+          block_id = 0
+          blocks = []
+
+          until file_to_send.eof?
+            block_id += 1
+
+            @content = file_to_send.read 4194304 # Send 4MB chunk
+            @connection.create_blob_block @uploader.azure_container, @path, block_id.to_s, @content
+            blocks << block_id.to_s
+          end
+
+          # Commit block blobs
+          @connection.commit_blob_blocks @uploader.azure_container, @path, blocks, :blob_content_type => @content_type
+
           true
         end
 
